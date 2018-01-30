@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Box Selection</title>
+    <link rel="stylesheet" href="ol.css" type="text/css">
+    <!-- The line below is only needed for old environments like Internet Explorer and Android 4.x -->
+    <script src="https://cdn.polyfill.io/v2/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
+    <script src="ol.js"></script>
+    <link rel="stylesheet" href="bootstrap.min.css">
+    <style>
+      html,body, #gesamtrahmen {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        margin: 0px;
+        max-height: 100%;
+      }
+      #map.halfscreen {width: 100%; max-height: 70%; min-height: 50%; z-index: 1;}
+      #map.fullscreen {width: 100%; height: 100%; z-index: 1;}
+      .ol-dragbox {
+        background-color: rgba(255,255,255,0.4);
+        border-color: rgba(100,150,0,1);
+      }
+      #popup.seitlich {
+        position: absolute;
+        top: 16%;
+        right: 5%;
+        width: 200px;
+        height: 300px;
+        border: 10px rgb(26, 25, 25) solid;
+        border-radius: 15px;
+        z-index: 100;
+        font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+        font-style: normal;
+        opacity: 0; /* zu Anfang */
+        transition: opacity 0.25s;
+        transition-timing-function: ease-in-out;
+        background: rgba(253, 214, 19, 0.75);
+        color: #000000;
+      }
+      #popup.unterhalb{
+        position: absolute; /* realtiv, wenn es drunter sein soll */
+        display: grid; /* tja.. was macht das wirklich? aber sieht ganz cool aus */
+        width: 100%;
+        padding: 0em; /* war 1em */
+        margin: 0em 0px 0px 0px;
+        border-top: 4px rgb(26, 25, 25) solid;
+        border-radius: 0px;
+        z-index: 100;
+        font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+        font-style: normal;
+        opacity: 0; /* zu Anfang */
+        transition: opacity 0.25s;
+        transition-timing-function: ease-in-out;
+        background: rgba(253, 214, 19, 0.82);
+        color: #000000;
+        bottom: 0px; /* Muss weg, wenn es drunter sein soll */
+      }
+      #popup.unterhalb2{
+        position: absolute; /* realtiv, wenn es drunter sein soll */
+        display: grid; /* tja.. was macht das wirklich? aber sieht ganz cool aus */
+        /* width: 100%; */
+        padding: 0em; /* war 1em */
+        margin: 0em 0px 0px 0px;
+        border: 2px rgb(26, 25, 25) solid;
+        border-radius: 00%;
+        z-index: 100;
+        font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+        font-style: normal;
+        opacity: 0; /* zu Anfang */
+        transition: opacity 0.25s;
+        transition-timing-function: ease-in-out;
+        background: rgba(248, 223, 109, 0.42);
+        color: #000000;
+        bottom: 0px; /* Muss weg, wenn es drunter sein soll */
+      }
+      #table {
+        display: table;
+        width: 100%;
+        position: relative;
+        height: 100%;
+      }
+      #left {
+        color: #C03C3C;
+      }
+      td,tr {
+        padding-right: 10px;
+        padding-left: 8px;
+        padding-top: 8px;
+        text-align: left;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gesamtrahmen">
+      <div id="map" class="map seitlich"></div> <!-- die Hauptkarte -->
+      <div class="unterhalb" id="popup"></div> <!-- das Detailfenster -->
+    </div>
+    <script>
+        /*
+        var vectorSource = new ol.source.Vector({
+          url: 'https://openlayers.org/en/v4.4.2/examples/data/geojson/countries.geojson',
+          format: new ol.format.GeoJSON()
+        }); */
+
+        // Quasi der Punkt aus dem dann das Icon gemacht wird. (Via ".setStyle()"")
+        var iconFeature = new ol.Feature({
+          geometry: new ol.geom.Point(ol.proj.transform([13.35,52.50], 'EPSG:4326', 'EPSG:3857')),
+          name: 'Stock1',
+          population: 4000,
+          rainfall: 500
+        });
+
+        // Der Style mit dem Bienenlogo (für die Marker). Anchor ist die Stelle des Icons, die seiner Positionsbestimmung zugrunde liegt. Hier "hängt es in der Karte".
+        var iconStyle = new ol.style.Style({
+          image: new ol.style.Icon({
+            anchor: [0.5, 46],
+            anchorXUnits: 'fraction',
+            anchorYUnits: 'pixels',
+            src: '5378888054.png'
+          })
+        });
+ 
+        /* Zufällig Features / Icons hinzufügen */
+        var iconFeatures_ = new Array();
+
+        for (var i = 0; i<= 40; i++){
+          var r = Math.random() * 7 - 3.5;
+          var r2 = Math.random() * 7 - 3.5;
+          var geometry = new ol.geom.Point(ol.proj.transform([13.35+r,52.50-r2], 'EPSG:4326', 'EPSG:3857'));
+          var f = new ol.Feature ({
+            geometry: geometry, 
+            name: r + ", " + r2,
+            ort: "Testplatz",
+            queens: "2",
+            lastfeeding: "22.11.2016",
+            zuletztBearbeitetVon: "Julia Tester"
+          });
+          f.setStyle(iconStyle);
+          iconFeatures_.push(f);
+        }
+
+        // Mach aus dem Punkt das schönere Icon
+        iconFeature.setStyle(iconStyle);
+
+        // generell die Initialisierung der "Vektorquelle", die die features beinhaltet. 
+        // Hier kommt der Array der zufälligen Features rein.
+        var vectorSource = new ol.source.Vector({
+          features: iconFeatures_
+        });
+  
+        // die Map (das Hauptelement)
+        var map = new ol.Map({
+          layers: [
+            new ol.layer.Tile({
+              source: new ol.source.OSM()
+            }),
+            new ol.layer.Vector({
+              source: vectorSource
+            })
+          ],
+          target: 'map',
+          view: new ol.View({
+            center: ol.proj.transform([13.35,52.50], 'EPSG:4326', 'EPSG:3857'), //EPSG:4326 ist Standard, ESPG:3857 entspricht ESPG:900913 alias "sherical mercator" von google.          
+            zoom: 9
+          })
+        });
+
+        // change mouse cursor when over marker
+        map.on('pointermove', function(e) {
+          var pixel = map.getEventPixel(e.originalEvent);
+          var hit = map.hasFeatureAtPixel(pixel);
+          map.getTargetElement().style.cursor = hit ? 'pointer' : '';
+        });
+
+        // Infos beim Klick anzeigen
+        map.on('click', function(evt) {
+          //console.log ("Click",evt);
+          var feature = map.forEachFeatureAtPixel(evt.pixel,
+              function(feature) {
+                console.log(feature);
+                return feature;
+              });
+          if (feature) {
+            showinfo();
+            var lonlat = ol.proj.transform(feature.getGeometry().getCoordinates(), 'EPSG:3857', 'EPSG:4326');
+            console.log(lonlat);
+            var lon = Math.round(lonlat[0]*100)/100;
+            var lat = Math.round(lonlat[1]*100)/100;
+            document.getElementById("popup").innerHTML = "<table><tr><td id='left'>Ort</td><td>   " + feature.get('ort') + "</td></tr><tr><td id='left'>Queens </td><td>   " + feature.get('queens') + "</td></tr><tr><td id='left'>Letzte Fütterung </td><td>   " + feature.get('lastfeeding') + "</td></tr><tr><td id='left'>Bearbeitet von </td><td>   " + feature.get('zuletztBearbeitetVon') + "</td></tr><tr><td id='left'>Lon </td><td>   " + lon + "</td></tr><tr><td id='left'>Lat </td><td>   " + lat + "</td></tr></table>";
+            //var coordinates = feature.getGeometry().getCoordinates();
+            //popup.setPosition(coordinates);
+          /* $(element).popover({
+              'placement': 'top',
+              'html': true,
+              'content': feature.get('name')
+            });
+            $(element).popover('show');
+          } else {
+            $(element).popover('destroy');*/
+          }
+          else {
+            /* Irgendwo anders in Karte geklickt -> Infobox ausblenden */
+            hideinfo ();
+            if (popupist() == "unterhalb") {
+              map.fullscreen();
+            }
+          }
+        });
+        
+        // brauchen wir öfters
+        var popup = document.getElementById("popup");
+        
+        // Die Infobox anzeigen
+        function showinfo() {
+          if (popup.style.opacity = "0") {
+            popup.style.opacity = "1";
+          }
+        }
+        
+        // Die Infobox ausblenden
+        function hideinfo() {
+          if (popup.style.opacity = "1") {
+            popup.style.opacity = "0";
+          }
+        }
+
+        // Wo ist die Infobox positioniert? (Ob sichtbar, oder nicht)
+        function popupist() {
+          if (popup.classList.contains("unterhalb")) {
+            return "unterhalb";
+          }
+          else if (popup.classList.contains("seitlich")) {
+            return "seitlich";
+          }
+          else { return "false"; }
+        }
+
+        function infoseitlich(){
+          popup.classList.remove("unterhalb");
+          popup.classList.add("seitlich");
+          map.fullscreen();
+        }
+
+        function infounterhalb() {
+          popup.classList.remove("seitlich");
+          popup.classList.add("unterhalb");
+          // wenn es drunter anschließen soll map.halfscreen();
+        }
+
+        map.fullscreen = function () {
+          map.getTargetElement().classList.remove("halfscreen");
+          map.getTargetElement().classList.add("fullscreen");
+          map.updateSize();
+        }
+
+        map.halfscreen = function () {
+          map.getTargetElement().classList.remove("fullscreen");
+          map.getTargetElement().classList.add("halfscreen");
+          map.updateSize();
+        }
+
+        popup.addEventListener("click", 
+          function (evt) {
+            if (popup.classList.contains ("seitlich")) {
+              infounterhalb();
+            }
+            else if (popup.classList.contains("unterhalb")) {
+              infoseitlich();
+            }
+          }
+        );
+    </script>
+  </body>
+</html>
